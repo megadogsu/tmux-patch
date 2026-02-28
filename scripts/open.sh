@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # Meta-aware URL opener for tmux copy-mode.
-# Receives selected text via stdin, detects Meta patterns, and opens in browser.
+#
+# Two modes:
+#   1. With selection (stdin has content): opens the selected text
+#   2. Without selection (from search highlight): reads the line under
+#      the cursor and extracts the Meta pattern or URL at cursor position
 #
 # Supported patterns:
 #   D12345678  → internalfb.com diff
@@ -10,15 +14,10 @@
 #   ME12345    → internalfb.com metric360
 #   N12345     → internalfb.com bento notebook
 #   URLs       → open directly
-#   File paths → open with $EDITOR
+#   File paths → open in Finder/file manager
 #   Other      → Google search
 
 set -euo pipefail
-
-# Read selected text from stdin, trim whitespace
-text=$(cat | tr -d '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-
-[[ -z "$text" ]] && exit 0
 
 # Platform-specific opener
 if [[ "$(uname)" == "Darwin" ]]; then
@@ -33,70 +32,88 @@ open_url() {
     nohup "$OPENER" "$1" >/dev/null 2>&1 &
 }
 
-# --- Meta patterns ---
+# Try to detect and open a Meta pattern or URL from arbitrary text.
+# Extracts the first matching pattern from the input.
+detect_and_open() {
+    local text="$1"
 
-# Diff: D followed by digits (at least 5)
-if [[ "$text" =~ (D[0-9]{5,}) ]]; then
-    open_url "https://www.internalfb.com/diff/${BASH_REMATCH[1]}"
-    exit 0
+    # Diff: D followed by digits (at least 5)
+    if [[ "$text" =~ (D[0-9]{5,}) ]]; then
+        open_url "https://www.internalfb.com/diff/${BASH_REMATCH[1]}"
+        return 0
+    fi
+
+    # Task: T followed by digits (at least 5)
+    if [[ "$text" =~ (T[0-9]{5,}) ]]; then
+        open_url "https://www.internalfb.com/${BASH_REMATCH[1]}"
+        return 0
+    fi
+
+    # SEV: "SEV 12345" or S followed by digits (at least 4)
+    if [[ "$text" =~ SEV[[:space:]]*([0-9]+) ]] || [[ "$text" =~ (^|[^A-Za-z])S([0-9]{4,})($|[^0-9]) ]]; then
+        local num="${BASH_REMATCH[1]:-${BASH_REMATCH[2]}}"
+        open_url "https://www.internalfb.com/sevmanager/view/$num"
+        return 0
+    fi
+
+    # Paste: P followed by digits (at least 5)
+    if [[ "$text" =~ (P[0-9]{5,}) ]]; then
+        open_url "https://www.internalfb.com/phabricator/paste/view/${BASH_REMATCH[1]}"
+        return 0
+    fi
+
+    # Metric360: ME followed by digits
+    if [[ "$text" =~ (ME[0-9]+) ]]; then
+        open_url "https://www.internalfb.com/intern/metric360/metric/?metric_id=${BASH_REMATCH[1]}"
+        return 0
+    fi
+
+    # Bento Notebook: N followed by digits (at least 5), not part of a word
+    if [[ "$text" =~ (^|[^A-Za-z])N([0-9]{5,})($|[^0-9]) ]]; then
+        open_url "https://www.internalfb.com/intern/anp/view/?id=${BASH_REMATCH[2]}"
+        return 0
+    fi
+
+    # Full URL
+    if [[ "$text" =~ (https?://[[:alnum:]?=%/_.:,\;~@!#\$\&\(\)\*+/-]+) ]]; then
+        open_url "${BASH_REMATCH[1]}"
+        return 0
+    fi
+
+    # Bare internalfb.com URL
+    if [[ "$text" =~ ((www\.)?internalfb\.com[[:alnum:]?=%/_.:,\;~@!#\$\&\(\)\*+/-]*) ]]; then
+        open_url "https://${BASH_REMATCH[1]}"
+        return 0
+    fi
+
+    return 1
+}
+
+# --- Read input ---
+
+# Read selected text from stdin (copy-pipe-and-cancel pipes the selection)
+text=$(cat | tr -d '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+
+# If stdin was empty (no selection), try to read the line under cursor
+if [[ -z "$text" ]]; then
+    # In copy mode, capture the current cursor line
+    cursor_y=$(tmux display-message -p '#{copy_cursor_y}' 2>/dev/null || echo "")
+    if [[ -n "$cursor_y" ]]; then
+        text=$(tmux capture-pane -p -S "$cursor_y" -E "$cursor_y" 2>/dev/null | head -1)
+        text=$(echo "$text" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    fi
 fi
 
-# Task: T followed by digits (at least 5)
-if [[ "$text" =~ (T[0-9]{5,}) ]]; then
-    open_url "https://www.internalfb.com/${BASH_REMATCH[1]}"
-    exit 0
-fi
+[[ -z "$text" ]] && exit 0
 
-# SEV: S followed by digits, or "SEV 12345"
-if [[ "$text" =~ SEV[[:space:]]*([0-9]+) ]] || [[ "$text" =~ ^S([0-9]{4,})$ ]]; then
-    open_url "https://www.internalfb.com/sevmanager/view/${BASH_REMATCH[1]}"
-    exit 0
-fi
-
-# Paste: P followed by digits (at least 5)
-if [[ "$text" =~ (P[0-9]{5,}) ]]; then
-    open_url "https://www.internalfb.com/phabricator/paste/view/${BASH_REMATCH[1]}"
-    exit 0
-fi
-
-# Metric360: ME followed by digits
-if [[ "$text" =~ (ME[0-9]+) ]]; then
-    open_url "https://www.internalfb.com/intern/metric360/metric/?metric_id=${BASH_REMATCH[1]}"
-    exit 0
-fi
-
-# Bento Notebook: N followed by digits (at least 5)
-if [[ "$text" =~ ^N([0-9]{5,})$ ]]; then
-    open_url "https://www.internalfb.com/intern/anp/view/?id=${BASH_REMATCH[1]}"
-    exit 0
-fi
-
-# --- URLs ---
-
-# Already a full URL
-if [[ "$text" =~ ^https?:// ]]; then
-    open_url "$text"
-    exit 0
-fi
-
-# Bare internalfb.com URL (no scheme)
-if [[ "$text" =~ ^(www\.)?internalfb\.com ]]; then
-    open_url "https://$text"
-    exit 0
-fi
-
-# Other bare URLs (domain.tld/path pattern)
-if [[ "$text" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]*\.)+[a-zA-Z]{2,}(/|$) ]]; then
-    open_url "https://$text"
+# --- Try Meta patterns and URLs first ---
+if detect_and_open "$text"; then
     exit 0
 fi
 
 # --- File paths ---
-
-# Get the pane's current directory from tmux (if available)
 pane_dir=$(tmux display-message -p '#{pane_current_path}' 2>/dev/null || echo "")
 
-# Resolve relative paths
 if [[ "$text" == /* ]]; then
     filepath="$text"
 elif [[ -n "$pane_dir" ]]; then

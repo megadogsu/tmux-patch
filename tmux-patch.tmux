@@ -14,6 +14,11 @@
 #      - Opens URLs, file paths, or falls back to Google search
 #      - Binds 'o' in copy-mode-vi to open, 'S' to search
 #
+#   3. Meta-aware URL search (replaces copycat C-u):
+#      - Finds standard URLs + Meta asset references (D12345, T12345, etc.)
+#      - Uses tmux's native regex search (no Unicode offset bugs)
+#      - n/N to cycle through matches, o to open
+#
 # Requirements:
 #   - tmux-resurrect (for resurrect features)
 #   - Claude Code CLI (for claude feature)
@@ -68,3 +73,14 @@ tmux bind-key -T copy-mode-vi S send-keys -X copy-pipe-and-cancel \
     "tr -d '\n' | sed 's/ /+/g' | xargs -I{} open 'https://www.google.com/search?q={}'"
 tmux bind-key -T copy-mode    S send-keys -X copy-pipe-and-cancel \
     "tr -d '\n' | sed 's/ /+/g' | xargs -I{} open 'https://www.google.com/search?q={}'"
+
+# =============================================================================
+# Meta-aware URL/pattern search (replaces copycat C-u)
+# =============================================================================
+
+# Uses tmux's native regex search instead of copycat's awk-based positioning
+# which breaks on Unicode characters (⏺, ⎿, etc. from Claude Code output).
+# After first match: n = next match, N = previous match, o = open in browser
+SEARCH_SCRIPT="$CURRENT_DIR/scripts/search.sh"
+
+tmux bind-key -T prefix C-u run-shell "$SEARCH_SCRIPT"
