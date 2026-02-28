@@ -84,3 +84,13 @@ tmux bind-key -T copy-mode    S send-keys -X copy-pipe-and-cancel \
 SEARCH_SCRIPT="$CURRENT_DIR/scripts/search.sh"
 
 tmux bind-key -T prefix C-u run-shell "$SEARCH_SCRIPT"
+
+# =============================================================================
+# File path search (replaces copycat C-f)
+# =============================================================================
+# Native tmux search — no flashing, no double-matches, no Unicode bugs.
+# Matches paths with extensions, anchored paths, and deep relative paths.
+# After first match: n = next, N = previous, o = open
+FILE_SEARCH_SCRIPT="$CURRENT_DIR/scripts/search_file.sh"
+
+tmux bind-key -T prefix C-f run-shell "$FILE_SEARCH_SCRIPT"
