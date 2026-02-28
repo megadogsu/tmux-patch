@@ -92,6 +92,7 @@ main() {
 
     if [[ ${#parts[@]} -gt 0 ]]; then
         local IFS=", "
+        display_message "Saved ${parts[*]} session(s)"
     fi
 }
 

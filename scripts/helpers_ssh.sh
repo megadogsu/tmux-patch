@@ -3,7 +3,6 @@
 
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/helpers.sh"
 
-# Get SSH target from an SSH pane's process tree.
 get_ssh_target() {
     local shell_pid="$1"
     local ssh_pid
@@ -22,25 +21,62 @@ get_ssh_target() {
     fi
 }
 
-# Find Claude sessions on a remote host.
-# Gets session IDs and cwds. Uses /proc on Linux, pwdx or ps on macOS.
-# Prints: session_id<TAB>working_dir (one per line, deduplicated)
 get_remote_claude_sessions() {
     local target="$1"
     timeout 5 ssh -o ConnectTimeout=3 -o BatchMode=yes "$target" 'bash -s' 2>/dev/null <<'REMOTE_SCRIPT'
+_resolve_dir_key() {
+    local key="${1#-}"
+    local full_slash="/$(echo "$key" | tr '-' '/')"
+
+    # Find deepest existing prefix directory
+    local test="$full_slash"
+    while [ -n "$test" ] && [ "$test" != "/" ]; do
+        [ -d "$test" ] && break
+        test=$(dirname "$test")
+    done
+    local prefix="$test"
+
+    # Get remaining path after prefix
+    local suffix="${full_slash#$prefix}"
+    suffix="${suffix#/}"
+    [ -z "$suffix" ] && echo "$prefix" && return 0
+
+    # Split suffix into parts and try merging with hyphens
+    local current="$prefix"
+    local pending=""
+    local IFS='/'
+    for part in $suffix; do
+        if [ -z "$pending" ]; then
+            pending="$part"
+        else
+            pending="${pending}-${part}"
+        fi
+        if [ -d "${current}/${pending}" ]; then
+            current="${current}/${pending}"
+            pending=""
+        fi
+    done
+    [ -n "$pending" ] && current="${current}/${pending}"
+    [ -d "$current" ] && echo "$current" || echo "$prefix"
+}
+
+seen=""
 for pid in $(pgrep -f "claude.*--resume" 2>/dev/null); do
-    args=$(ps -o args= -p "$pid" 2>/dev/null)
-    session_id=$(echo "$args" | sed -n 's/.*--resume  *\([a-f0-9-]*\).*/\1/p')
+    session_id=$(ps -o args= -p "$pid" 2>/dev/null | \
+                 sed -n 's/.*--resume  *\([a-f0-9-]*\).*/\1/p')
     [ -z "$session_id" ] && continue
-    # Get cwd — fast methods only
-    cwd=""
-    if [ -d /proc ]; then
-        cwd=$(readlink "/proc/$pid/cwd" 2>/dev/null)
-    elif command -v pwdx >/dev/null 2>&1; then
-        cwd=$(pwdx "$pid" 2>/dev/null | cut -d: -f2 | tr -d ' ')
-    fi
-    [ -z "$cwd" ] && cwd="~"
+    echo "$seen" | grep -q "$session_id" && continue
+    seen="$seen $session_id"
+
+    cwd="$HOME"
+    for proj_dir in "$HOME"/.claude/projects/*/; do
+        if [ -f "${proj_dir}${session_id}.jsonl" ]; then
+            resolved=$(_resolve_dir_key "$(basename "$proj_dir")")
+            [ -n "$resolved" ] && cwd="$resolved"
+            break
+        fi
+    done
     printf "%s\t%s\n" "$session_id" "$cwd"
-done | sort -u -t'	' -k1,1
+done
 REMOTE_SCRIPT
 }

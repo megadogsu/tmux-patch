@@ -3,7 +3,7 @@
 # Called via @resurrect-hook-post-restore-all AFTER resurrect recreates panes.
 #
 # - Claude (local): resumes via `claude --resume <id>`
-# - SSH + Claude: sends `claude --resume` after a brief SSH connect wait
+# - SSH + Claude: reconnects SSH, then resumes Claude on remote
 # - Vim: handled by tmux-resurrect natively
 
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,7 +16,6 @@ SSH_SESSIONS_FILE="$RESURRECT_DIR/ssh_sessions.txt"
 main() {
     local count=0
 
-    # Brief init wait
     sleep 0.5
 
     # --- Restore local Claude sessions ---
@@ -30,20 +29,29 @@ main() {
         done < "$CLAUDE_SESSIONS_FILE"
     fi
 
-    # --- Restore SSH + Claude sessions ---
-    # Resurrect already sent the `ssh <target>` command to recreated panes.
-    # We wait briefly for SSH to connect, then send claude --resume.
+    # --- Restore SSH sessions ---
+    # Resurrect does NOT restore ssh processes (not in @resurrect-processes).
+    # We send the ssh command ourselves, wait for connection, then resume Claude.
     if [[ -f "$SSH_SESSIONS_FILE" && -s "$SSH_SESSIONS_FILE" ]]; then
-        # Single wait for all SSH connections
-        sleep 2
+        # First pass: send all SSH commands
+        while IFS=$'\t' read -r pane_target ssh_target remote_session_id remote_dir; do
+            [[ -z "$pane_target" || "$pane_target" =~ ^# ]] && continue
+            [[ -z "$ssh_target" ]] && continue
+            tmux has-session -t "${pane_target%%:*}" 2>/dev/null || continue
 
+            tmux send-keys -t "$pane_target" "ssh ${ssh_target}" C-m
+        done < "$SSH_SESSIONS_FILE"
+
+        # Wait for SSH connections to establish
+        sleep 3
+
+        # Second pass: send Claude resume commands
         while IFS=$'\t' read -r pane_target ssh_target remote_session_id remote_dir; do
             [[ -z "$pane_target" || "$pane_target" =~ ^# ]] && continue
             [[ -z "$remote_session_id" ]] && continue
             tmux has-session -t "${pane_target%%:*}" 2>/dev/null || continue
 
-            local cmd="claude --resume ${remote_session_id}"
-            [[ "$remote_dir" != "~" && -n "$remote_dir" ]] && cmd="cd ${remote_dir} && ${cmd}"
+            local cmd="cd ${remote_dir} && claude --resume ${remote_session_id}"
             tmux send-keys -t "$pane_target" "$cmd" C-m
             count=$((count + 1))
         done < "$SSH_SESSIONS_FILE"
