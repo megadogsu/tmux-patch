@@ -15,8 +15,10 @@ CLAUDE_SESSIONS_FILE="$RESURRECT_DIR/claude_sessions.txt"
 SSH_SESSIONS_FILE="$RESURRECT_DIR/ssh_sessions.txt"
 
 # Async SSH session capture — runs in background so save doesn't block.
+# Writes to a temp file then atomically moves to avoid partial reads.
 _save_ssh_sessions_async() {
-    : > "$SSH_SESSIONS_FILE"
+    local tmp_file="${SSH_SESSIONS_FILE}.tmp.$$"
+    : > "$tmp_file"
 
     declare -A queried_targets
     declare -A remote_sessions
@@ -45,14 +47,17 @@ _save_ssh_sessions_async() {
 
             printf '%s\t%s\t%s\t%s\n' \
                 "$pane_target" "$ssh_target" "$remote_session_id" "$remote_dir" \
-                >> "$SSH_SESSIONS_FILE"
+                >> "$tmp_file"
         else
             printf '%s\t%s\t\t\n' \
                 "$pane_target" "$ssh_target" \
-                >> "$SSH_SESSIONS_FILE"
+                >> "$tmp_file"
         fi
     done < <(tmux list-panes -a -F \
         '#{session_name}:#{window_index}.#{pane_index}	#{pane_pid}	#{pane_current_command}	#{pane_current_path}')
+
+    # Atomic replace
+    mv -f "$tmp_file" "$SSH_SESSIONS_FILE"
 }
 
 main() {
