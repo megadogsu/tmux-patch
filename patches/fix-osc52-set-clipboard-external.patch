@@ -1,0 +1,23 @@
+--- /tmp/tmux-orig/tmux-tmux-2014783/input.c	2024-10-04 23:01:16.000000000 -0700
++++ /tmp/tmux-tmux-2014783/input.c	2026-02-26 01:29:39.464354442 -0800
+@@ -2918,7 +2918,7 @@
+ 	if (wp == NULL)
+ 		return;
+ 	state = options_get_number(global_options, "set-clipboard");
+-	if (state != 2)
++	if (state == 0)
+ 		return;
+ 
+ 	if ((end = strchr(p, ';')) == NULL)
+@@ -2959,7 +2959,10 @@
+ 	screen_write_stop(&ctx);
+ 	notify_pane("pane-set-clipboard", wp);
+ 
+-	paste_add(NULL, out, outlen);
++	if (state == 2)
++		paste_add(NULL, out, outlen);
++	else
++		free(out);
+ }
+ 
+ /* Handle the OSC 104 sequence for unsetting (multiple) palette entries. */
