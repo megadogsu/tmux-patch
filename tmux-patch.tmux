@@ -43,6 +43,11 @@ _tmux_patch_chain_hook() {
     local existing
     existing=$(tmux show-option -gqv "$hook_name" 2>/dev/null)
 
+    # Skip if already chained (prevents duplicates on tmux source-file)
+    if [[ "$existing" == *"$new_command"* ]]; then
+        return 0
+    fi
+
     if [[ -n "$existing" ]]; then
         tmux set-option -g "$hook_name" "${existing} ; ${new_command}"
     else
