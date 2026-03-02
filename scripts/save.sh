@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Save hook for tmux-resurrect-patch.
 # Called via @resurrect-hook-post-save-all (no arguments).
+# Compatible with bash 3.2 (macOS default) — no associative arrays.
 
 CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$CURRENT_DIR/helpers.sh"
@@ -37,8 +38,12 @@ main() {
     local tmp_ssh="${SSH_SESSIONS_FILE}.tmp.$$"
     : > "$tmp_ssh"
 
-    declare -A queried_targets
-    declare -A remote_sessions
+    # Use temp files instead of associative arrays (bash 3.2 compat)
+    local queried_file="${RESURRECT_DIR}/.queried_targets.$$"
+    local remote_cache_dir="${RESURRECT_DIR}/.remote_cache.$$"
+    : > "$queried_file"
+    mkdir -p "$remote_cache_dir"
+    trap 'rm -f "$LOCK_FILE" "$queried_file"; rm -rf "$remote_cache_dir"' EXIT
 
     while IFS=$'\t' read -r pane_target pane_pid pane_cmd pane_dir; do
         if [[ "$pane_cmd" == "claude" ]]; then
@@ -59,16 +64,21 @@ main() {
             local ssh_target
             ssh_target=$(get_ssh_target "$pane_pid")
             if [[ -n "$ssh_target" ]]; then
-                if [[ -z "${queried_targets[$ssh_target]}" ]]; then
-                    queried_targets[$ssh_target]=1
-                    remote_sessions[$ssh_target]=$(get_remote_claude_sessions "$ssh_target")
+                # Dedup: query each ssh target only once
+                local target_key
+                target_key=$(echo "$ssh_target" | tr '/@:.' '_')
+                local cache_file="$remote_cache_dir/$target_key"
+
+                if ! grep -qxF "$ssh_target" "$queried_file" 2>/dev/null; then
+                    echo "$ssh_target" >> "$queried_file"
+                    get_remote_claude_sessions "$ssh_target" > "$cache_file" 2>/dev/null
                 fi
 
-                local remaining="${remote_sessions[$ssh_target]}"
-                if [[ -n "$remaining" ]]; then
+                if [[ -s "$cache_file" ]]; then
                     local first_line
-                    first_line=$(echo "$remaining" | head -1)
-                    remote_sessions[$ssh_target]=$(echo "$remaining" | tail -n +2)
+                    first_line=$(head -1 "$cache_file")
+                    # Remove consumed line
+                    tail -n +2 "$cache_file" > "${cache_file}.tmp" && mv "${cache_file}.tmp" "$cache_file"
                     printf '%s\t%s\t%s\n' \
                         "$pane_target" "$ssh_target" "$first_line" \
                         >> "$tmp_ssh"
@@ -85,14 +95,13 @@ main() {
 
     mv -f "$tmp_ssh" "$SSH_SESSIONS_FILE"
 
-    local parts=()
-    [[ $vim_count -gt 0 ]] && parts+=("${vim_count} vim")
-    [[ $claude_count -gt 0 ]] && parts+=("${claude_count} claude")
-    [[ $ssh_count -gt 0 ]] && parts+=("${ssh_count} ssh")
+    local msg=""
+    [[ $vim_count -gt 0 ]] && msg="${vim_count} vim"
+    [[ $claude_count -gt 0 ]] && msg="${msg:+$msg, }${claude_count} claude"
+    [[ $ssh_count -gt 0 ]] && msg="${msg:+$msg, }${ssh_count} ssh"
 
-    if [[ ${#parts[@]} -gt 0 ]]; then
-        local IFS=", "
-        display_message "Saved ${parts[*]} session(s)"
+    if [[ -n "$msg" ]]; then
+        display_message "Saved ${msg} session(s)"
     fi
 }
 

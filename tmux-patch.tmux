@@ -35,32 +35,12 @@ CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Resurrect patches
 # =============================================================================
 
-# Chain a command onto an existing tmux-resurrect hook without overwriting it
-_tmux_patch_chain_hook() {
-    local hook_name="$1"
-    local new_command="$2"
-
-    local existing
-    existing=$(tmux show-option -gqv "$hook_name" 2>/dev/null)
-
-    # Skip if already chained (prevents duplicates on tmux source-file)
-    if [[ "$existing" == *"$new_command"* ]]; then
-        return 0
-    fi
-
-    if [[ -n "$existing" ]]; then
-        tmux set-option -g "$hook_name" "${existing} ; ${new_command}"
-    else
-        tmux set-option -g "$hook_name" "${new_command}"
-    fi
-}
-
-# Save hook: auto-create vim sessions + capture claude session IDs
-_tmux_patch_chain_hook "@resurrect-hook-post-save-all" \
+# Set hooks idempotently (no chaining — always overwrite to prevent
+# duplicates from repeated tmux source-file).
+tmux set-option -g @resurrect-hook-post-save-all \
     "$CURRENT_DIR/scripts/save.sh"
 
-# Restore hook: resume claude sessions (vim restore handled by resurrect natively)
-_tmux_patch_chain_hook "@resurrect-hook-post-restore-all" \
+tmux set-option -g @resurrect-hook-post-restore-all \
     "$CURRENT_DIR/scripts/restore.sh"
 
 # =============================================================================
