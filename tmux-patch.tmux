@@ -79,3 +79,15 @@ tmux bind-key -T prefix C-u run-shell "$SEARCH_SCRIPT"
 FILE_SEARCH_SCRIPT="$CURRENT_DIR/scripts/search_file.sh"
 
 tmux bind-key -T prefix C-f run-shell "$FILE_SEARCH_SCRIPT"
+
+# =============================================================================
+# Performance patches for tmux-resurrect
+# =============================================================================
+
+# Replace resurrect's ps.sh save strategy with a fast O(1) version.
+# The default scans ALL processes per pane (~3s each on loaded systems).
+RESURRECT_PS="$HOME/.tmux/plugins/tmux-resurrect/save_command_strategies/ps.sh"
+FAST_PS="$CURRENT_DIR/patches/resurrect_ps_fast.sh"
+if [[ -f "$FAST_PS" && -f "$RESURRECT_PS" ]]; then
+    cp "$FAST_PS" "$RESURRECT_PS"
+fi
