@@ -12,7 +12,7 @@
 #   2. Meta-aware URL opener (replaces tmux-open):
 #      - Detects D/T/S/P/ME/N patterns and opens them on internalfb.com
 #      - Opens URLs, file paths, or falls back to Google search
-#      - Binds 'o' in copy-mode-vi to open, 'S' to search
+#      - Binds 'o' in copy-mode-vi to open, 'S' to search, 'c' to code search
 #
 #   3. Meta-aware URL search (replaces copycat C-u):
 #      - Finds standard URLs + Meta asset references (D12345, T12345, etc.)
@@ -81,6 +81,7 @@ FILE_SEARCH_SCRIPT="$CURRENT_DIR/scripts/search_file.sh"
 tmux bind-key -T prefix C-f run-shell "$FILE_SEARCH_SCRIPT"
 
 # =============================================================================
+# =============================================================================
 # Performance patches for tmux-resurrect
 # =============================================================================
 
@@ -91,3 +92,12 @@ FAST_PS="$CURRENT_DIR/patches/resurrect_ps_fast.sh"
 if [[ -f "$FAST_PS" && -f "$RESURRECT_PS" ]]; then
     cp "$FAST_PS" "$RESURRECT_PS"
 fi
+
+# =============================================================================
+# Meta code search
+# =============================================================================
+# 'c' in copy-mode-vi: search selected text in Meta code search
+CODESEARCH_SCRIPT="$CURRENT_DIR/scripts/codesearch.sh"
+
+tmux bind-key -T copy-mode-vi c send-keys -X copy-pipe-and-cancel "$CODESEARCH_SCRIPT"
+tmux bind-key -T copy-mode    c send-keys -X copy-pipe-and-cancel "$CODESEARCH_SCRIPT"

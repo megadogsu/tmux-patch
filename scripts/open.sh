@@ -19,17 +19,29 @@
 
 set -euo pipefail
 
-# Platform-specific opener
+# Platform-specific opener (falls back to clipboard via OSC 52 on remote hosts)
 if [[ "$(uname)" == "Darwin" ]]; then
     OPENER="open"
 elif command -v xdg-open &>/dev/null; then
     OPENER="xdg-open"
 else
-    exit 1
+    OPENER=""
 fi
 
 open_url() {
-    nohup "$OPENER" "$1" >/dev/null 2>&1 &
+    if [[ -n "$OPENER" ]]; then
+        nohup "$OPENER" "$1" >/dev/null 2>&1 &
+    else
+        # No local opener (remote/devserver) — copy URL to clipboard via OSC 52
+        local client_tty
+        client_tty=$(tmux display-message -p "#{client_tty}" 2>/dev/null)
+        if [[ -n "$client_tty" && -w "$client_tty" ]]; then
+            local b64
+            b64=$(printf '%s' "$1" | base64 -w0 2>/dev/null || printf '%s' "$1" | base64 2>/dev/null)
+            printf "\033]52;c;%s\007" "$b64" > "$client_tty"
+        fi
+        tmux display-message "Copied to clipboard: $1"
+    fi
 }
 
 # Try to detect and open a Meta pattern or URL from arbitrary text.
