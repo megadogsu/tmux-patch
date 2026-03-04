@@ -19,6 +19,10 @@
 #      - Uses tmux's native regex search (no Unicode offset bugs)
 #      - n/N to cycle through matches, o to open
 #
+#   4. Hash/hostname/IP search (replaces copycat C-h):
+#      - Finds SHA hashes, IPv4 addresses, hostnames
+#      - Native tmux search, no flashing
+#
 # Requirements:
 #   - tmux-resurrect (for resurrect features)
 #   - Claude Code CLI (for claude feature)
@@ -79,6 +83,16 @@ tmux bind-key -T prefix C-u run-shell "$SEARCH_SCRIPT"
 FILE_SEARCH_SCRIPT="$CURRENT_DIR/scripts/search_file.sh"
 
 tmux bind-key -T prefix C-f run-shell "$FILE_SEARCH_SCRIPT"
+
+# =============================================================================
+# Hash, hostname, IP search (replaces copycat C-h)
+# =============================================================================
+# Matches SHA hashes (12-40 hex), IPv4 addresses, and hostnames.
+# Native tmux search, no flashing, no Unicode bugs.
+# After first match: n = next, N = previous, o = open
+HASH_SEARCH_SCRIPT="$CURRENT_DIR/scripts/search_hash.sh"
+
+tmux bind-key -T prefix C-h run-shell "$HASH_SEARCH_SCRIPT"
 
 # =============================================================================
 # =============================================================================
