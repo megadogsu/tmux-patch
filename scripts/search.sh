@@ -8,7 +8,9 @@
 set -euo pipefail
 
 # Combined pattern: URLs + Meta asset references
-PATTERN='https?://[[:alnum:]?=%/_.:,;~@!#$&()*+/-]+|git@[[:alnum:]._-]+:[[:alnum:]?=%/_.:,;~@!#$&()*+/-]+|[DTP][0-9]{5,}|ME[0-9]+|S[0-9]{4,}|SEV [0-9]+|N[0-9]{5,}'
+# Allow balanced parens inside URLs (e.g. Wikipedia) but reject trailing )
+# when the URL is merely wrapped in parens like (https://example.com/).
+PATTERN='https?://([[:alnum:]?=%/_.:,;~@!#$&*+/-]|\([[:alnum:]?=%/_.:,;~@!#$&*+/-]*\))+|git@[[:alnum:]._-]+:[[:alnum:]?=%/_.:,;~@!#$&*+/-]+|[DTP][0-9]{5,}|ME[0-9]+|S[0-9]{4,}|SEV [0-9]+|N[0-9]{5,}'
 
 # Enter copy mode if not already in it
 tmux copy-mode
