@@ -78,7 +78,7 @@ main() {
                     local first_line
                     first_line=$(head -1 "$cache_file")
                     # Remove consumed line
-                    tail -n +2 "$cache_file" > "${cache_file}.tmp" && mv "${cache_file}.tmp" "$cache_file"
+                    tail -n +2 "$cache_file" > "${cache_file}.tmp" && mv -f "${cache_file}.tmp" "$cache_file"
                     printf '%s\t%s\t%s\n' \
                         "$pane_target" "$ssh_target" "$first_line" \
                         >> "$tmp_ssh"
