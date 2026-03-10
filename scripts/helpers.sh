@@ -38,15 +38,10 @@ save_vim_sessions() {
 # --- Claude helpers ---
 
 # Get all descendant PIDs of a given PID (recursive).
-# Uses /proc on Linux, ps on macOS.
 get_descendant_pids() {
     local pid="$1"
     local children
-    if [[ "$(uname)" == "Darwin" ]]; then
-        children=$(ps -o pid= -ppid "$pid" 2>/dev/null)
-    else
-        children=$(ps -o pid= --ppid "$pid" 2>/dev/null)
-    fi
+    children=$(pgrep -P "$pid" 2>/dev/null)
     for child in $children; do
         child="${child// /}"
         [[ -z "$child" ]] && continue
@@ -153,6 +148,28 @@ get_claude_session_info() {
                 if [[ -n "$result" ]]; then
                     echo "$result"
                     return 0
+                fi
+            fi
+
+            # Method 3b: The sessions file isn't kept open, but the launcher
+            # log file IS. Derive the sessions file path from the log filename.
+            local log_file
+            log_file=$(lsof -p "$pid_list" -Fn 2>/dev/null | \
+                       sed -n 's/^n//p' | \
+                       grep 'claude_code_invocation_.*\.log' | head -1)
+
+            if [[ -n "$log_file" ]]; then
+                local invocation_id
+                invocation_id=$(basename "$log_file" .log)
+                local tmpdir="${TMPDIR:-/tmp}"
+                local sessions_file="${tmpdir}/claude_launcher_${invocation_id}.sessions"
+                if [[ -f "$sessions_file" ]]; then
+                    local result
+                    result=$(_extract_from_launcher_file "$sessions_file")
+                    if [[ -n "$result" ]]; then
+                        echo "$result"
+                        return 0
+                    fi
                 fi
             fi
 
