@@ -4,7 +4,15 @@
 get_resurrect_dir() {
     local dir
     dir=$(tmux show-option -gqv @resurrect-dir 2>/dev/null)
-    dir="${dir:-$HOME/.tmux/resurrect}"
+    if [[ -z "$dir" ]]; then
+        # Match tmux-resurrect's own fallback logic:
+        # use ~/.tmux/resurrect if it exists, otherwise XDG_DATA_HOME
+        if [[ -d "$HOME/.tmux/resurrect" ]]; then
+            dir="$HOME/.tmux/resurrect"
+        else
+            dir="${XDG_DATA_HOME:-$HOME/.local/share}/tmux/resurrect"
+        fi
+    fi
     dir="${dir/#\~/$HOME}"
     echo "$dir"
 }
