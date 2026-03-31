@@ -10,8 +10,39 @@ CURRENT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$CURRENT_DIR/helpers.sh"
 
 RESURRECT_DIR="$(get_resurrect_dir)"
-CLAUDE_SESSIONS_FILE="$RESURRECT_DIR/claude_sessions.txt"
-SSH_SESSIONS_FILE="$RESURRECT_DIR/ssh_sessions.txt"
+
+# Find the versioned session file matching the save being restored.
+# Falls back to the most recent non-empty versioned file, then the
+# unversioned file.
+_find_session_file() {
+    local prefix="$1"  # "claude_sessions" or "ssh_sessions"
+    local last_save
+    last_save="$(readlink "$RESURRECT_DIR/last" 2>/dev/null)"
+    if [[ -n "$last_save" ]]; then
+        local timestamp
+        timestamp="${last_save#tmux_resurrect_}"
+        timestamp="${timestamp%.txt}"
+        local versioned="$RESURRECT_DIR/${prefix}_${timestamp}.txt"
+        if [[ -s "$versioned" ]]; then
+            echo "$versioned"
+            return
+        fi
+    fi
+    # Fallback: most recent non-empty versioned file
+    local latest
+    latest="$(ls -t "$RESURRECT_DIR/${prefix}_"*.txt 2>/dev/null | while read -r f; do
+        [[ -s "$f" ]] && echo "$f" && break
+    done)"
+    if [[ -n "$latest" ]]; then
+        echo "$latest"
+        return
+    fi
+    # Final fallback: unversioned file
+    echo "$RESURRECT_DIR/${prefix}.txt"
+}
+
+CLAUDE_SESSIONS_FILE="$(_find_session_file claude_sessions)"
+SSH_SESSIONS_FILE="$(_find_session_file ssh_sessions)"
 
 main() {
     local count=0

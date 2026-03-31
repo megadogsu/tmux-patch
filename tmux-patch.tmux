@@ -85,9 +85,10 @@ FILE_SEARCH_SCRIPT="$CURRENT_DIR/scripts/search_file.sh"
 tmux bind-key -T prefix C-f run-shell "$FILE_SEARCH_SCRIPT"
 
 # =============================================================================
-# Hash, hostname, IP search (replaces copycat C-h)
+# Hash, hostname, IP, device serial search (replaces copycat C-h)
 # =============================================================================
-# Matches SHA hashes (12-40 hex), IPv4 addresses, and hostnames.
+# Matches SHA hashes (12-40 hex), IPv4, IPv6 (4+ groups), hostnames,
+# and ADB/device serial numbers (10-20 uppercase alphanumeric).
 # Native tmux search, no flashing, no Unicode bugs.
 # After first match: n = next, N = previous, o = open
 HASH_SEARCH_SCRIPT="$CURRENT_DIR/scripts/search_hash.sh"

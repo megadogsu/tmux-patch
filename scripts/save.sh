@@ -12,6 +12,24 @@ CLAUDE_SESSIONS_FILE="$RESURRECT_DIR/claude_sessions.txt"
 SSH_SESSIONS_FILE="$RESURRECT_DIR/ssh_sessions.txt"
 LOCK_FILE="$RESURRECT_DIR/.save_patch.lock"
 
+# Copy session files alongside the versioned resurrect save file so that
+# a later auto-save (with no claude/ssh running) cannot overwrite them.
+_version_session_files() {
+    local last_save
+    last_save="$(readlink "$RESURRECT_DIR/last" 2>/dev/null)"
+    if [[ -n "$last_save" ]]; then
+        local timestamp
+        timestamp="${last_save#tmux_resurrect_}"
+        timestamp="${timestamp%.txt}"
+        if [[ -s "$CLAUDE_SESSIONS_FILE" ]]; then
+            cp "$CLAUDE_SESSIONS_FILE" "$RESURRECT_DIR/claude_sessions_${timestamp}.txt"
+        fi
+        if [[ -s "$SSH_SESSIONS_FILE" ]]; then
+            cp "$SSH_SESSIONS_FILE" "$RESURRECT_DIR/ssh_sessions_${timestamp}.txt"
+        fi
+    fi
+}
+
 main() {
     # Skip if another save is already running (from continuum auto-save)
     if [[ -f "$LOCK_FILE" ]]; then
@@ -99,6 +117,9 @@ main() {
     [[ $vim_count -gt 0 ]] && msg="${vim_count} vim"
     [[ $claude_count -gt 0 ]] && msg="${msg:+$msg, }${claude_count} claude"
     [[ $ssh_count -gt 0 ]] && msg="${msg:+$msg, }${ssh_count} ssh"
+
+    # Version session files alongside the main resurrect save
+    _version_session_files
 
     if [[ -n "$msg" ]]; then
         display_message "Saved ${msg} session(s)"
